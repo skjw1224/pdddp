@@ -21,6 +21,10 @@ class TrajDataPostProcessing(object):
         self.save_period = save_period
         self.init_data()
 
+        self.path = os.getcwd().split('pdddp')[0] + 'pdddp/results/' + self.env.name + '_data/'
+        if not os.path.exists(self.path):
+            os.makedirs(self.path, exist_ok=True)
+
     def init_data(self):
         # Stat history: Mean Episode value of Augmented cost, Convergence Jac norm * 2 (Path, term)
         self.epi_stat_history = np.zeros([1, 3])
@@ -124,14 +128,10 @@ class TrajDataPostProcessing(object):
         print(epi_num,
               np.array2string(self.epi_stat_history[-1, :2], formatter={'float_kind': lambda x: "    %.4f" % x}))
 
-        path = os.getcwd() + '/results/' + self.env.name + '_data/'
-        if not os.path.exists(path):
-            os.makedirs(path, exist_ok=True)
-
-        np.savetxt(path + prefix + '_stat_history.txt', self.epi_stat_history, newline='\n')
+        np.savetxt(self.path + prefix + '_stat_history.txt', self.epi_stat_history, newline='\n')
         if epi_num % self.save_period == 0 or save_flag:
-            np.savetxt(path + prefix + '_path_data_history.txt', self.epi_path_data_history, newline='\n')
-            np.savetxt(path + prefix + '_term_data_history.txt', self.epi_term_data_history, newline='\n')
+            np.savetxt(self.path + prefix + '_path_data_history.txt', self.epi_path_data_history, newline='\n')
+            np.savetxt(self.path + prefix + '_term_data_history.txt', self.epi_term_data_history, newline='\n')
 
         if self.epi_path_gain_history is not None:
-            np.savetxt(path + prefix + '_path_gain.txt', self.epi_path_gain_history, newline='\n')
+            np.savetxt(self.path + prefix + '_path_gain.txt', self.epi_path_gain_history, newline='\n')
