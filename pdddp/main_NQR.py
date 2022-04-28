@@ -10,7 +10,7 @@ from pdddp.mpc_mhe_dompc import DirectCollocation
 os.environ['PYTHONPATH'] = os.getcwd()
 
 NOISE_TRAINING_INDEX = 2
-TRAIN_EPISODES = 200
+TRAIN_EPISODES = 500
 TEST_EPISODES = 1
 SAVE_PERIOD = 20
 
@@ -22,7 +22,7 @@ def train(env):
     mpc, _ = direct_solver(env, ddp_ref=None, full_horizon=True, closed_loop=False)
 
     prev_TRmoments = None
-    epi_value_gains = None
+    epi_solutions = None
     CDDP_count = 0
 
     # Train with CDDP method
@@ -32,20 +32,20 @@ def train(env):
         estimator = {'MHE': None}
 
         # Save plant trajectory data with closed-loop run
-        epi_traj, epi_misc_traj, _ = dynamics_iterator.multiple_leg_rollout(epi_value_gains, prev_epi_data=None,
+        epi_traj, epi_misc_traj, _ = dynamics_iterator.multiple_leg_rollout(epi_solutions, prev_epi_data=None,
                                                                          controller=controller, estimator=estimator)
 
         save_vfncs = True if i == TRAIN_EPISODES - 1 else False
-        epi_value_gains, TRmoments = cddp_iterator.solve_cddp(epi_traj, prev_TRmoments, epi_num=CDDP_count, save_vfncs=save_vfncs)
+        epi_solutions, TRmoments = cddp_iterator.solve_cddp(epi_traj, prev_TRmoments, epi_num=CDDP_count, save_vfncs=save_vfncs)
         prev_TRmoments = TRmoments
         CDDP_count += 1
 
         # Print statistics & Save history data
-        postprocessing.stats_record(epi_value_gains, epi_traj, epi_misc_traj, epi_num=i)
+        postprocessing.stats_record(epi_solutions, epi_traj, epi_misc_traj, epi_num=i)
         postprocessing.print_and_save_history(epi_num=i, prefix='train')
 
     print("========================Train ended==========================")
-    final_solution = [epi_value_gains, epi_traj]
+    final_solution = [epi_solutions, epi_traj]
     # Save solutions as pkl
     with open(postprocessing.path + 'final_solution.pkl', 'wb') as fw:
         pickle.dump(final_solution, fw)
@@ -117,7 +117,7 @@ def plant_test(env_plant):
                                                    controller=controller, estimator=estimator)
         # Print statistics & Save history data
         postprocessing.stats_record(cddp_value_gains_copy, test_epi_data, test_epi_misc_data, epi_num=i, save_gains=True)
-        postprocessing.print_and_save_history(epi_num=i, save_flag=True, prefix='two_stage_test')
+        postprocessing.print_and_save_history(epi_num=i, save_flag=True, prefix='plant_test')
     print("cddp_predictor_corrector time :", time.time() - start_time)
 
     print('cddp_corrector')
@@ -132,7 +132,7 @@ def plant_test(env_plant):
                                                    controller=controller, estimator=estimator)
         # Print statistics & Save history data
         postprocessing.stats_record(cddp_value_gains, test_epi_data, test_epi_misc_data, epi_num=i, save_gains=True)
-        postprocessing.print_and_save_history(epi_num=i, save_flag=True, prefix='two_stage_test')
+        postprocessing.print_and_save_history(epi_num=i, save_flag=True, prefix='plant_test')
     print("cddp_corrector time :", time.time() - start_time)
 
     print('cddp_open_loop')
@@ -147,7 +147,7 @@ def plant_test(env_plant):
                                                    controller=controller, estimator=estimator)
         # Print statistics & Save history data
         postprocessing.stats_record(cddp_value_gains, test_epi_data, test_epi_misc_data, epi_num=i, save_gains=True)
-        postprocessing.print_and_save_history(epi_num=i, save_flag=True, prefix='two_stage_test')
+        postprocessing.print_and_save_history(epi_num=i, save_flag=True, prefix='plant_test')
     print("cddp_open_loop time :", time.time() - start_time)
 
 def direct_solver(env, ddp_ref, full_horizon, closed_loop, mpc_period=None):
@@ -163,8 +163,8 @@ def main():
     env_plant = NQRconstEnv(prob_type='plant')
 
     train(env)
-    nominal_test(env)
-    plant_test(env_plant)
+    # nominal_test(env)
+    # plant_test(env_plant)
 
 if __name__ == '__main__':
     main()

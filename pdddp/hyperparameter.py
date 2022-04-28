@@ -1,7 +1,13 @@
 import numpy as np
 
+# PEN_INIT = 1.
+# PEN_INC_RATE, PEN_DEAC_RATE, PEN_MIN, PEN_MAX = 0.00, 0.00, 0.1, 1E2
+# TR_MIN, TR_MAX = 1E-7, 0.1
+# BETA, TOL_MIN, TOL_MAX = 0.2, 1E-8, 1E-2
+# ALPHA, ALPHA_FIN, BETA1, BETA2, EPS = 0.01, 0.05, 0.8, 0.9, 1e-7  # Adam parameters beta1 < sqrt(beta2)
+
 PEN_INIT = 1.
-PEN_INC_RATE, PEN_DEAC_RATE, PEN_MIN, PEN_MAX = 0.00, 0.00, 0.1, 1E2
+PEN_INC_RATE, PEN_DEAC_RATE, PEN_MIN, PEN_MAX = 0.001, 0.00, 0.1, 1E2
 TR_MIN, TR_MAX = 1E-7, 0.1
 BETA, TOL_MIN, TOL_MAX = 0.2, 1E-8, 1E-2
 ALPHA, ALPHA_FIN, BETA1, BETA2, EPS = 0.01, 0.05, 0.8, 0.9, 1e-7  # Adam parameters beta1 < sqrt(beta2)
@@ -36,7 +42,7 @@ class HyperParameter(object):
 
         return np.array([penalty, tr_rad, tol_leg]).reshape([-1, 1])
 
-    def test_adjust(self, Jac_stack, prev_b_moments, hyper_param, epi_num):
+    def test_adjust(self, Jac_stack, prev_b_moments, hyper_param, epi_num, num_reject):
         """
         :param Jac_stack: "path" --> np.c_[np.r_[Hu, Hxu], np.r_[Hl, Hxl]]
                          "term" -->  np.r_[Pm, Pxm]
@@ -46,7 +52,6 @@ class HyperParameter(object):
         :param epi_num:
         :return:
         """
-
 
         penalty, tr_rad, Jac_tol = hyper_param
         # 1. 1st order convergence: Hl, Hu = 0
@@ -81,7 +86,7 @@ class HyperParameter(object):
         max_sche = TR_MAX * (1 - 0.9 * epi_num / self.epi_max)
 
         # Learning rate adjust (RMSProp)
-        alpha_decay = ALPHA / np.sqrt(epi_num + 1)
+        alpha_decay = ALPHA / np.sqrt(epi_num + 1) * 2 ** (-num_reject)
         TR_radius = np.clip(alpha_decay * np.linalg.norm(m_u) / (np.sqrt(v_u) + EPS), min_sche, max_sche)  # Learning rate adjust (RMSProp)
 
         opt_param = np.array([penalty.item(), TR_radius.item(), Jac_tol.item()]).reshape([-1, 1])

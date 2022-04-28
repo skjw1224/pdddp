@@ -3,7 +3,7 @@ import numpy as np
 import do_mpc
 
 MAX_ITER = 1000
-ne, nd = 1, 3
+ne, nd = 2, 3
 nP, nR = 10, 5
 M = 10000
 

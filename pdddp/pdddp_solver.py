@@ -27,7 +27,7 @@ PCOST_MAX = 10
 PCONST_MAX = 10
 COST_MAX = 10
 CONST_MAX = 10
-V_MAX = 1E5
+V_MAX = 20
 
 class CDDPSolver(object):
     def __init__(self, env, epi_max):
@@ -53,6 +53,7 @@ class CDDPSolver(object):
         else:
             self.X_MIN, self.U_MIN  = 0, 0
         self.DX_MAX = DX_MAX / env.nT
+        self.V_MAX = V_MAX * env.nT
 
         self.path_sym_args, self.term_sym_args = env.path_sym_args, env.term_sym_args
         self.dyns_fncs, self.cost_fncs, self.costT_fncs, self.constP_fncs, self.constT_fncs = env.model_derivs
@@ -72,8 +73,10 @@ class CDDPSolver(object):
         self.epi_num = 0
         self.num_reject = 0
 
-    def assign_epi_num(self, epi_num):
+    def assign_epi_num(self, epi_num, num_reject):
         self.epi_num = epi_num
+        self.num_reject = num_reject
+
 
     def bwd_path_eval(self, env_data, new_Vnplus_list, prev_b_moments):
         """Backward single step computation: 1. Solve primal QCQP under dx, l = 0 --> Compute du, l
@@ -87,7 +90,7 @@ class CDDPSolver(object):
         xcurr, xest, u, Lagr, hyper_param_path, p_mu, p_sigma, p_eps = env_data
         path_eval_args = [xest, u, p_mu, p_sigma, p_eps]
 
-        Vplus_fncs = [np.clip(Vi, -V_MAX, V_MAX) for Vi in new_Vnplus_list]
+        Vplus_fncs = [np.clip(Vi, -self.V_MAX, self.V_MAX) for Vi in new_Vnplus_list]
 
         dyns_eval = [np.clip(fi, -DYNS_MAX, DYNS_MAX) for fi in self.dyns_fncs(*path_eval_args)]  # F, Fx, Fu
         cost_eval = [np.clip(fi, -PCOST_MAX, PCOST_MAX) for fi in self.cost_fncs(*path_eval_args)]  # L, Lx, Lu, Lxx, Lxu, Luu
@@ -146,13 +149,13 @@ class CDDPSolver(object):
         path_gain_stack = self.trust_region_opt.gain_eval(ul_Mat, ul_Jac_stack, self.a_dim, prob_type='minmax')
 
         opt_param, path_Jac_norm, path_ubJac_mom, H_b_moments = \
-            self.hyper_parameter.test_adjust(path_gain_stack, prev_b_moments, hyper_param_path, self.epi_num)
+            self.hyper_parameter.test_adjust(path_gain_stack, prev_b_moments, hyper_param_path, self.epi_num, self.num_reject)
 
         "Solve backward HJB ODE & Optimize u"
         path_gain_list = np.split(path_ubJac_mom, np.cumsum([1]), axis=1) # l, Kx
         Vminus_list = self.backward_HJB(Vplus_fncs, Hamiltonian_list, path_gain_list)
 
-        Vminus_list = [np.clip(Vi, -V_MAX, V_MAX) for Vi in Vminus_list]
+        Vminus_list = [np.clip(Vi, -self.V_MAX, self.V_MAX) for Vi in Vminus_list]
 
         # Update Lagrangian & Hyperparameters
         updated_env_data = [xcurr, xest, u, new_lagr, opt_param, p_mu, p_sigma, p_eps]
@@ -359,7 +362,7 @@ class CDDPSolver(object):
 
         # Update hyperparameter, biased moment & Evaluate unbiased Jacobian moment
         opt_param, term_Jac_norm, term_ubJac_mom, b_moments = \
-            self.hyper_parameter.test_adjust(term_gain_stack, prev_b_moments, hyper_param_term, self.epi_num)
+            self.hyper_parameter.test_adjust(term_gain_stack, prev_b_moments, hyper_param_term, self.epi_num, self.num_reject)
 
         term_gain_list = np.split(term_ubJac_mom, [1], axis=1) #lm, Kmx
 
@@ -368,7 +371,7 @@ class CDDPSolver(object):
 
         # Normalization
         Vterm_list = [VT, VxT, VxxT]
-        Vterm_list = [np.clip(Vi, -V_MAX, V_MAX) for Vi in Vterm_list]
+        Vterm_list = [np.clip(Vi, -self.V_MAX, self.V_MAX) for Vi in Vterm_list]
 
         # Update Lagrangian & Hyperparameters
         updated_env_data = [x, xest, new_lagr_term, opt_param, p_mu, p_sigma, p_eps]

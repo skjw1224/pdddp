@@ -15,6 +15,7 @@ class TrustRegionOpt(object):
         self.cT_dim = self.cTineq_dim + self.cTeq_dim
 
         self.M = 100000 # Arbitrary large
+        self.eps = np.finfo(np.float32).eps / 2
 
         self.primal_QCQP_path = self.def_primal_QCQP(self.a_dim, self.cP_dim)
         self.dual_QCQP_path = self.def_dual_QCQP(self.cP_dim)
@@ -83,14 +84,14 @@ class TrustRegionOpt(object):
         G, Gu = constr[0] + Lagr / c, constr[2]
         D = Du * np.eye(nu)
 
-        # Feasible --> 1
+        # Feasible (strict, weak) (1, 2) --> 1
         # Infeasible (Infeas ineq, equality) --> 0
         A_Mask = np.sign(active_set)
 
-        # LB: unbounded for feasible constraint, 0 for infeasible constraint
-        lbg = np.r_[-self.M * np.ones([1, 1]), np.zeros([nc, 1])]
+        # LB: unbounded for feasible constraint, 0 for infeasible constraint (eps-relaxed)
+        lbg = np.concatenate([-self.M * np.ones([1, 1]), -(self.M * A_Mask + self.eps * (1 - A_Mask))])
         # UB: 0 for all constraints (eps-relaxed)
-        ubg = np.zeros([1 + nc, 1])
+        ubg = np.concatenate([np.zeros([1, 1]), self.eps * np.ones([nc, 1])])
 
         # Optimize with numeric values
         primal_qcqp = QCQP(p=np.concatenate([np.reshape(Hess, [nu**2, 1]), Jac, A_Mask, G, np.reshape(Gu, [nc*nu, 1]), hyper]), lbg=lbg, ubg=ubg)
@@ -118,7 +119,7 @@ class TrustRegionOpt(object):
 
         Eq_Mask = np.concatenate([np.zeros([nineq, 1]), np.ones([nc - nineq, 1])])
         # UB: 0 UBs for inequality constraints (nineq), others (nc - nineq) are unbounded (relaxed by M)
-        ubg = np.concatenate([np.zeros([1, 1]), self.M * Eq_Mask])
+        ubg = np.concatenate([np.zeros([1, 1]), self.M * Eq_Mask + self.eps * (1 - Eq_Mask)])  # [eps, eps, .., eps, M, M, .., M]
 
         # Optimize with numeric values
         dual_qcqp = QCQP(p=np.concatenate([np.reshape(Hess, [nc**2, 1]), Jac, Lagr, hyper]), ubg=ubg)
@@ -139,7 +140,7 @@ class TrustRegionOpt(object):
         c_dim = constr.shape[0]
         penalty, radius, tol = hyper.flatten()
 
-        # Feasible (1)
+        # Feasible (strict, weak) (1, 2)
         # Infeasible (Infeas ineq, equaliy) (0)
         lagr = np.zeros([c_dim, 1])
         for i in range(c_dim):

@@ -27,7 +27,7 @@ class TrajDataPostProcessing(object):
 
     def init_data(self):
         # Stat history: Mean Episode value of Augmented cost, Convergence Jac norm * 2 (Path, term)
-        self.epi_stat_history = np.zeros([1, 3])
+        self.epi_stat_history = np.zeros([1, 4])
 
         # Path data history: x, xest, y, u, r, cP, l, opP, V
         self.epi_path_data_history = np.zeros([1, self.s_dim + 2 * self.o_dim + self.a_dim + 1 + 2 * self.cP_dim + OPT_PAR_DIM])
@@ -57,7 +57,8 @@ class TrajDataPostProcessing(object):
         "Stat history"
         # Path stat history
         Vn_list_epi, path_gain_list_epi, _, _, _, cost_aug_path_epi, conv_stat_path_epi = epi_path_solution
-        epi_path_stat = np.array([[np.mean(cost_aug_path_epi), np.mean(conv_stat_path_epi)]])
+        cost_path_epi = [di[0] for di in epi_path_misc_data]
+        epi_path_stat = np.array([[np.mean(cost_path_epi), np.mean(cost_aug_path_epi), np.mean(conv_stat_path_epi)]])
 
         # terminal stat history
         VnT_list_epi, term_gain_list_epi, _, _, conv_stat_term_epi = epi_term_solution
@@ -124,9 +125,9 @@ class TrajDataPostProcessing(object):
             prefix = str('')
 
         np.set_printoptions(precision=4)
-        print('| Episode ', '| Cost ', '| Conv ')
+        print('| Episode ', '| Cost ', '| Cost aug', '| Conv ')
         print(epi_num,
-              np.array2string(self.epi_stat_history[-1, :2], formatter={'float_kind': lambda x: "    %.4f" % x}))
+              np.array2string(self.epi_stat_history[-1, :3], formatter={'float_kind': lambda x: "    %.4f" % x}))
 
         np.savetxt(self.path + prefix + '_stat_history.txt', self.epi_stat_history, newline='\n')
         if epi_num % self.save_period == 0 or save_flag:

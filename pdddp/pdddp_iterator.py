@@ -1,8 +1,7 @@
 import numpy as np
 from pdddp.pdddp_solver import CDDPSolver
 
-MAX_ITER = 1
-LAGR_ITER_PER_U = 1
+MAX_TRIAL = 3
 
 class CDDPIterator(CDDPSolver):
     def __init__(self, env, epi_max, leg_idx):
@@ -14,7 +13,7 @@ class CDDPIterator(CDDPSolver):
         self.feas_filter = np.inf
 
 
-    def solve_cddp(self, epi_traj, prev_b_moments, epi_num, save_vfncs):
+    def cddp_trial(self, epi_traj, prev_b_moments, epi_num, num_reject, save_vfncs):
         """args: epi_path_data, epi_term_data = epi_data
            epi path data: x, x2, u, l, [c, tr, tol], pm, ps, pe
            epi term data: xT, mT, [c, tr, tol], pm, ps, pe
@@ -25,7 +24,7 @@ class CDDPIterator(CDDPSolver):
             epi path solution: Vn reshape(Mat2Vec) list, FF/FB gain_list, new u, new l, new [c, tr, tol], Augmented Cost, Convergence Jac norm (Hu, Hl)
             epi term solution: VnT reshape(Mat2Vec) list, FF/FB gain_list, new mT, new  [c, tr, tol], Convergence Jac norm (PmT)"""
 
-        self.assign_epi_num(epi_num)
+        self.assign_epi_num(epi_num, num_reject)
         epi_path_data, epi_term_data = epi_traj
         if prev_b_moments is None:
             prev_b_moments = self.init_TRmoments
@@ -116,8 +115,45 @@ class CDDPIterator(CDDPSolver):
         epi_term_solutions = [VnT_list_epi, term_gain_list_epi,
                               new_mT_epi, new_hypparam_term_epi, conv_stat_term_epi]
 
-        epi_value_gains = [epi_path_solutions, epi_term_solutions]
+        epi_solutions = [epi_path_solutions, epi_term_solutions]
 
         TRmoments = [path_bmom_epi, term_bmom_epi]
 
-        return epi_value_gains, TRmoments
+        return epi_solutions, TRmoments
+
+    def solve_cddp(self, epi_traj, prev_b_moments, epi_num, save_vfncs):
+        num_reject = 0
+        iterflag = True
+
+        while iterflag:
+            epi_solutions, TRmoments = self.cddp_trial(epi_traj, prev_b_moments, epi_num, num_reject, save_vfncs)
+            num_reject += 1
+
+            iterflag = self.filter_line_search(epi_solutions, epi_num, num_reject)
+
+        if num_reject >= 10:
+            epi_solutions, TRmoments = self.cddp_trial(epi_traj, prev_b_moments, epi_num, num_reject, save_vfncs)
+        return epi_solutions, TRmoments
+
+
+    def filter_line_search(self, epi_solutions, epi_num, num_reject):
+        _, _, _, _, _, cost_aug_epi, conv_stat_path_epi = epi_solutions[0]
+        cost = np.mean(cost_aug_epi)
+        feas = np.mean(conv_stat_path_epi)
+
+        iterflag = True
+        if num_reject >= MAX_TRIAL:
+            iterflag = False
+
+        if epi_num >= 2:
+            if feas <= 2 * self.feas_filter:
+                self.feas_filter = feas
+
+            if feas <= 5 * self.feas_filter:
+                iterflag = False
+        else:
+            iterflag = False
+
+        print("Acceptance: ", not iterflag, "Trial num: ", num_reject, feas, self.feas_filter)
+
+        return iterflag
